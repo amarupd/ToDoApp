@@ -11,7 +11,8 @@ A simple ToDo application built with Flutter and Hive for local storage.
 
 ## Screenshots
 
-![IMG-20240503-WA0024](https://github.com/amarupd/ToDoListFlutter/assets/138681142/5deaabb0-32e0-4bcd-bdf9-fe7a11c1e40f)
+![todoapp](https://github.com/amarupd/ToDoListFlutter/assets/138681142/badee201-2e90-4bf4-b944-8563a22eb9a1)
+
 
 
 ## Getting Started
