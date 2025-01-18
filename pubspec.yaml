@@ -36,6 +36,7 @@ dependencies:
   pdf_compressor: ^0.2.0
   flutter_document_picker: ^5.2.3
   open_file: ^3.2.1
+  pdf_manipulator: ^0.5.9
 
 dev_dependencies:
   flutter_test:

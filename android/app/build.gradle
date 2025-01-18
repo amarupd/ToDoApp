@@ -24,8 +24,17 @@ if (flutterVersionName == null) {
 
 android {
     namespace "com.example.todoapp"
-    compileSdk flutter.compileSdkVersion
-    ndkVersion flutter.ndkVersion
+    
+    // Make sure compileSdkVersion is set to a valid number (e.g., 34 or the latest)
+    compileSdkVersion 34
+
+    defaultConfig {
+        minSdkVersion 21
+        targetSdkVersion 33  // Target at least SDK 30 (Android 11)
+        applicationId "com.example.todoapp"
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+    }
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
@@ -40,28 +49,17 @@ android {
         main.java.srcDirs += 'src/main/kotlin'
     }
 
-    defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId "com.example.todoapp"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
-        minSdkVersion flutter.minSdkVersion
-        targetSdkVersion flutter.targetSdkVersion
-        versionCode flutterVersionCode.toInteger()
-        versionName flutterVersionName
-    }
-
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.debug  // Make sure you configure your own signing for release builds
         }
     }
 }
 
 flutter {
-    source '../..'
+    source '../..' // Ensure this points to your Flutter source
 }
 
-dependencies {}
+dependencies {
+    // Include dependencies you need (e.g., PDF Compressor, permission handler)
+}
