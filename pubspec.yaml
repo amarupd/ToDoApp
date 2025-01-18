@@ -29,14 +29,11 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.0.0
   file_picker: ^5.3.0
-  archive: ^3.3.2
   path_provider: ^2.0.15
   permission_handler: ^11.3.1
-  syncfusion_flutter_pdf: ^28.1.39
   pdf_compressor: ^0.2.0
   flutter_document_picker: ^5.2.3
   open_file: ^3.2.1
-  pdf_manipulator: ^0.5.9
 
 dev_dependencies:
   flutter_test:
