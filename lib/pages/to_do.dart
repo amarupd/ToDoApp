@@ -1,11 +1,13 @@
-// ignore_for_file: prefer_const_constructors
+// ignore_for_file: prefer_const_constructors, sort_child_properties_last, prefer_const_literals_to_create_immutables
 
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:todoapp/data/database.dart';
+import 'package:todoapp/pages/pdf_compressor.dart';
 import 'package:todoapp/util/alert_dialog.dart';
 import 'package:todoapp/util/dialog_box.dart';
 import 'package:todoapp/util/todo_tile.dart';
+
 
 class ToDo extends StatefulWidget {
   const ToDo({super.key});
@@ -15,7 +17,7 @@ class ToDo extends StatefulWidget {
 }
 
 class _ToDoState extends State<ToDo> {
-  //refrence this box
+  // Reference the Hive box
   final _myBox = Hive.box('mybox');
   ToDoDataBase db = ToDoDataBase();
 
@@ -40,10 +42,10 @@ class _ToDoState extends State<ToDo> {
 
   void updateTask(int index, String newText) {
     setState(() {
-      db.toDoList[index][0] = newText; // Update the task name with the new text
+      db.toDoList[index][0] = newText;
     });
-    db.updateData(); // Update your database or storage mechanism if needed
-    Navigator.of(context).pop(); // Close the dialog
+    db.updateData();
+    Navigator.of(context).pop();
   }
 
   void saveNewTask() {
@@ -87,18 +89,16 @@ class _ToDoState extends State<ToDo> {
   }
 
   void editTask(int index) {
-    String currentTaskName = db.toDoList[index][0]; // Get the current task name
+    String currentTaskName = db.toDoList[index][0];
     showDialog(
       context: context,
       builder: (context) {
         return DialogBox(
           controller: _controller,
-          onSave: () => updateTask(
-              index, _controller.text), // Pass new text to update task
+          onSave: () => updateTask(index, _controller.text),
           onCancel: () => Navigator.of(context).pop(),
           isEdit: true,
-          initialText:
-              currentTaskName, // Pass the current task name to the DialogBox
+          initialText: currentTaskName,
         );
       },
     );
@@ -112,61 +112,92 @@ class _ToDoState extends State<ToDo> {
     Navigator.of(context).pop();
   }
 
+
+  void compressPDF() {
+  Navigator.push(
+    context,
+    MaterialPageRoute(builder: (context) => PDFCompressorPage()),
+  );
+}
+
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Color.fromARGB(255, 217, 252, 249),
       appBar: AppBar(
-        // shadowColor: Colors.black,
         backgroundColor: Colors.teal[400],
         elevation: 0,
-        title: Title(
-            color: Colors.white,
-            child: Center(
-              child: Text(
-                "ToDo List",
-                style: TextStyle(
-                  color: Color.fromARGB(255, 255, 255, 255),
-                  fontFamily: "IndieFlower",
-                  fontWeight: FontWeight.bold,
-                  fontSize: 30.0,
-                ),
-              ),
-            )),
-            actions: [
-    IconButton(
-      icon: Icon(Icons.help_outline, color: Colors.white), // Icon with question mark
-      onPressed: () {
-        // Display a dialog or snackbar with swipe instructions
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text("Swipe Instructions"),
-            content: Text("Swipe left to delete, swipe right to edit."),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop(); // Close the dialog
-                },
-                child: Text("OK"),
-              ),
-            ],
+        title: Center(
+          child: Text(
+            "ToDo List",
+            style: TextStyle(
+              color: Colors.white,
+              fontFamily: "IndieFlower",
+              fontWeight: FontWeight.bold,
+              fontSize: 30.0,
+            ),
           ),
-        );
-      },
-    ),
-  ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.teal[400],
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(50.0)),
-        onPressed: createNewTask,
-        child: Icon(
-          Icons.add,
-          size: 45,
-          color: const Color.fromARGB(255, 254, 254, 254),
         ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.help_outline, color: Colors.white),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: Text("Swipe Instructions"),
+                  content: Text("Swipe left to delete, swipe right to edit."),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                      child: Text("OK"),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+      floatingActionButton: Stack(
+        alignment: Alignment.bottomRight,
+        children: [
+          Positioned(
+            bottom: 20,
+            left: 50,
+            child: FloatingActionButton(
+              backgroundColor: Colors.orange,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(50.0)),
+              onPressed: compressPDF,
+              child: Icon(
+                Icons.picture_as_pdf,
+                size: 35,
+                color: Colors.white,
+              ),
+              tooltip: "Compress PDF",
+            ),
+          ),
+          Positioned(
+            bottom: 20,
+            right: 20,
+            child: FloatingActionButton(
+              backgroundColor: Colors.teal[400],
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(50.0)),
+              onPressed: createNewTask,
+              child: Icon(
+                Icons.add,
+                size: 45,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
       ),
       body: db.toDoList.isNotEmpty
           ? ListView.builder(
