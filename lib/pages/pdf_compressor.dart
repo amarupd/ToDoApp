@@ -1,16 +1,19 @@
+// ignore_for_file: avoid_print, sort_child_properties_last
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_document_picker/flutter_document_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'dart:async';
-import 'package:pdf_compressor/pdf_compressor.dart';
 import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class PDFCompressorPage extends StatefulWidget {
   const PDFCompressorPage({super.key});
 
   @override
-  // ignore: library_private_types_in_public_api
   _PDFCompressorPageState createState() => _PDFCompressorPageState();
 }
 
@@ -19,7 +22,6 @@ class _PDFCompressorPageState extends State<PDFCompressorPage> {
   String? _inputPath;
   String? _outputPath;
 
-  // Request storage permission
   Future<bool> requestStoragePermission() async {
     if (await Permission.manageExternalStorage.isGranted) {
       return true;
@@ -29,19 +31,47 @@ class _PDFCompressorPageState extends State<PDFCompressorPage> {
     }
   }
 
-  // Get the external storage directory for storing compressed PDFs
   Future<String> getCustomFolderPath() async {
-    const folderName = 'compressed_pdf';
-    Directory? externalStorageDir = Directory('/storage/emulated/0/$folderName');
-
-    // Create the folder if it doesn't exist
-    if (!await externalStorageDir.exists()) {
-      await externalStorageDir.create(recursive: true);
+    Directory? directory;
+    if (Platform.isAndroid) {
+      directory = Directory('/storage/emulated/0/Download');
+    } else {
+      directory = await getApplicationDocumentsDirectory();
     }
-    return externalStorageDir.path;
+    return directory.path;
   }
 
-  // Start compression
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) {
+      return "$bytes B"; // Bytes
+    } else if (bytes < 1024 * 1024) {
+      return "${(bytes / 1024).toStringAsFixed(2)} KB"; // Kilobytes
+    } else {
+      return "${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB"; // Megabytes
+    }
+  }
+
+  Future<String?> getAuthToken() async {
+    const apiKey =
+        'project_public_37187a6801c14b75bc4a489370fdca6e_eJWyu80d85dc122c061d9388d4a968b539457'; // Replace with your actual private API key
+    try {
+      final response = await http.post(
+        Uri.parse('https://api.ilovepdf.com/v1/auth'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'public_key': apiKey}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['token'];
+      } else {
+        return null;
+      }
+    } catch (e) {
+      return null;
+    }
+  }
+
   Future<void> startCompression() async {
     if (_inputPath == null) {
       _showDialog("No File Selected", "Please select a PDF file first.");
@@ -50,93 +80,196 @@ class _PDFCompressorPageState extends State<PDFCompressorPage> {
 
     bool permissionGranted = await requestStoragePermission();
     if (!permissionGranted) {
-      _showDialog("Permission Denied", "Storage permission is required to proceed.");
+      _showDialog(
+          "Permission Denied", "Storage permission is required to proceed.");
       return;
     }
 
     try {
-      // Get the custom folder path
+      setState(() {
+        _progress = 0.1;
+      });
+
+      String? token = await getAuthToken();
+      if (token == null) {
+        setState(() {
+          _progress = 0.0;
+        });
+        _showDialog("Error", "Failed to authenticate with iLovePDF API.");
+        return;
+      }
+
+      final startTaskResponse = await http.get(
+        Uri.parse('https://api.ilovepdf.com/v1/start/compress'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (startTaskResponse.statusCode != 200) {
+        setState(() {
+          _progress = 0.0;
+        });
+        throw Exception("Failed to create compression task.");
+      }
+
+      setState(() {
+        _progress = 0.2;
+      });
+
+      final taskData = jsonDecode(startTaskResponse.body);
+      final String taskId = taskData['task'];
+      final String serverUrl = taskData['server'];
+
+      var uploadRequest = http.MultipartRequest(
+        'POST',
+        Uri.parse('https://$serverUrl/v1/upload'),
+      );
+      uploadRequest.headers['Authorization'] = 'Bearer $token';
+      uploadRequest.fields['task'] = taskId;
+      uploadRequest.files
+          .add(await http.MultipartFile.fromPath('file', _inputPath!));
+      setState(() {
+        _progress = 0.3;
+      });
+
+      final uploadResponse =
+          await http.Response.fromStream(await uploadRequest.send());
+
+      if (uploadResponse.statusCode != 200) {
+        setState(() {
+          _progress = 0.0;
+        });
+        throw Exception("File upload failed.");
+      }
+
+      setState(() {
+        _progress = 0.4;
+      });
+
+      final uploadResult = jsonDecode(uploadResponse.body);
+      if (uploadResult['server_filename'] == null) {
+        setState(() {
+          _progress = 0.0;
+        });
+        throw Exception("File upload did not return a server filename.");
+      }
+
+      String serverFilename = uploadResult['server_filename'];
+
+      setState(() {
+        _progress = 0.5;
+      });
+
+      final processResponse = await http.post(
+        Uri.parse('https://$serverUrl/v1/process'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'task': taskId,
+          'tool': 'compress',
+          'compression_level': 'recommended',
+          'files': [
+            {
+              'server_filename': serverFilename,
+              'filename': File(_inputPath!).uri.pathSegments.last
+            }
+          ]
+        }),
+      );
+
+      if (processResponse.statusCode != 200) {
+        setState(() {
+          _progress = 0.0;
+        });
+        throw Exception("Failed to process compression.");
+      }
+
+      setState(() {
+        _progress = 0.7;
+      });
+
+      final downloadResponse = await http.get(
+        Uri.parse('https://$serverUrl/v1/download/$taskId'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (downloadResponse.statusCode != 200) {
+        setState(() {
+          _progress = 0.0;
+        });
+        throw Exception("Failed to download compressed file.");
+      }
+
       String customFolderPath = await getCustomFolderPath();
+      setState(() {
+        _progress = 0.9;
+      });
 
+      // ✅ Handle File Name Duplication
       String originalFileName = File(_inputPath!).uri.pathSegments.last;
-      String fileNameWithoutExtension = originalFileName.split('.').first;
-      String fileExtension = ".pdf";
+      String outputFilePath = '$customFolderPath/compressed_$originalFileName';
 
-      // Create a new output file name for the compressed PDF
-      String outputFileName = '${fileNameWithoutExtension}_compressed$fileExtension';
-      String outputFilePath = '$customFolderPath/$outputFileName';
-
-      // Check for file existence and add a count if needed
       int count = 1;
       while (File(outputFilePath).existsSync()) {
-        outputFileName = '${fileNameWithoutExtension}_compressed_$count$fileExtension';
-        outputFilePath = '$customFolderPath/$outputFileName';
+        outputFilePath =
+            '$customFolderPath/compressed_${count}_$originalFileName';
         count++;
       }
 
-      _outputPath = outputFilePath;
+      File compressedFile = File(outputFilePath);
+      await compressedFile.writeAsBytes(downloadResponse.bodyBytes);
 
-      // Simulate progress
+      // ✅ Get Compressed File Size
+      int fileSizeInBytes = compressedFile.lengthSync();
+      String readableFileSize = _formatFileSize(fileSizeInBytes);
+
+      setState(() {
+        _outputPath = outputFilePath;
+        _progress = 1.0;
+      });
+
+// ✅ Show Dialog with Compressed File Size
+      _showDialog(
+        "Compression Successful",
+        "Compressed file saved at:\n$_outputPath\n\nFile Size: $readableFileSize",
+        onOkPressed: () {
+          setState(() {
+            _inputPath = null;
+            _outputPath = null;
+            _progress = 0.0;
+          });
+        },
+      );
+      OpenFile.open(_outputPath!);
+    } catch (e) {
       setState(() {
         _progress = 0.0;
       });
-
-      Timer.periodic(const Duration(milliseconds: 100), (timer) async {
-        if (_progress < 1.0) {
-          setState(() {
-            _progress = (_progress + 0.1).clamp(0.0, 1.0); // Ensure progress is between 0.0 and 1.0
-          });
-        } else {
-          timer.cancel(); // Stop the timer when progress reaches 100%
-
-          try {
-            // Compress the PDF
-            await PdfCompressor.compressPdfFile(
-              _inputPath!,
-              _outputPath!,
-              CompressQuality.HIGH,
-            );
-            _showDialog(
-              "Compression Successful",
-              "Compressed file saved at:\n$_outputPath",
-            );
-            OpenFile.open(_outputPath!);
-          } catch (e) {
-            _showDialog("Compression Failed", "An error occurred: $e");
-          }
-
-          // Reset progress to 0 after completion (optional)
-          setState(() {
-            _progress = 0.0;
-          });
-        }
-      });
-    } catch (e) {
       _showDialog("Error", e.toString());
     }
   }
 
-  // File Picker to choose a PDF
   Future<void> pickPDF() async {
-  try {
-    String? path = await FlutterDocumentPicker.openDocument(
-      params: FlutterDocumentPickerParams(
-        allowedMimeTypes: ['application/pdf'], // Restrict to PDF files
-        allowedFileExtensions: ['pdf'], // Ensure only `.pdf` files
-      ),
-    );
-    if (path != null) {
-      setState(() {
-        _inputPath = path;
-      });
-    }
-  } catch (e) {
-    _showDialog("Error", "Failed to pick a file: $e");
-  }
-}
+    try {
+      String? path = await FlutterDocumentPicker.openDocument(
+        params: FlutterDocumentPickerParams(
+          allowedMimeTypes: ['application/pdf'],
+          allowedFileExtensions: ['pdf'],
+        ),
+      );
 
-  // Show dialog for status messages
-  void _showDialog(String title, String message) {
+      if (path != null) {
+        setState(() {
+          _inputPath = path;
+        });
+      }
+    } catch (e) {
+      _showDialog("Error", "Failed to pick a file: $e");
+    }
+  }
+
+  void _showDialog(String title, String message, {VoidCallback? onOkPressed}) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -144,7 +277,10 @@ class _PDFCompressorPageState extends State<PDFCompressorPage> {
         content: Text(message),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () {
+              Navigator.of(context).pop();
+              if (onOkPressed != null) onOkPressed();
+            },
             child: const Text("OK"),
           ),
         ],
@@ -156,16 +292,15 @@ class _PDFCompressorPageState extends State<PDFCompressorPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          "Compress PDF",
-          style: TextStyle(
-            color: Colors.white,
-            fontFamily: "IndieFlower",
-            fontWeight: FontWeight.bold,
-            fontSize: 30.0,
-          ),
-        ),
+        title: const Text("Compress PDF",
+            style: TextStyle(
+              color: Colors.white,
+              fontFamily: "IndieFlower",
+              fontWeight: FontWeight.bold,
+              fontSize: 30.0,
+            )),
         backgroundColor: Colors.teal[400],
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -173,50 +308,33 @@ class _PDFCompressorPageState extends State<PDFCompressorPage> {
           children: [
             ElevatedButton.icon(
               onPressed: pickPDF,
-              icon: const Icon(
-                Icons.picture_as_pdf,
-                color: Colors.white,
-              ),
-              label: const Text(
-                "Choose PDF File",
-                style: TextStyle(color: Color.fromARGB(255, 255, 255, 255)),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-              ),
+              icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+              label: const Text("Choose PDF File",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontFamily: "IndieFlower",
+                    fontWeight: FontWeight.bold,
+                  )),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
             ),
             const SizedBox(height: 20),
             if (_inputPath != null)
-              Text(
-                "Selected File: ${File(_inputPath!).uri.pathSegments.last}",
-                style: const TextStyle(fontSize: 16),
-                textAlign: TextAlign.center,
-              ),
+              Text("Selected File: ${File(_inputPath!).uri.pathSegments.last}"),
             const SizedBox(height: 20),
-            LinearProgressIndicator(
-              value: _progress,
-              minHeight: 8,
-              backgroundColor: Colors.grey[300],
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.teal),
-            ),
+            LinearProgressIndicator(value: _progress),
             const SizedBox(height: 20),
-            Text(
-              "${(_progress * 100).toInt()}% Completed",
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
+            Text("${(_progress * 100).toInt()}% Completed"),
             const Spacer(),
             ElevatedButton(
               onPressed: startCompression,
-              // ignore: sort_child_properties_last
-              child: const Text(
-                "Start Compression",
-                style: TextStyle(color: Color.fromARGB(255, 255, 255, 255)),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal[400],
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-              ),
+              child: const Text("Start Compression",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontFamily: "IndieFlower",
+                    fontWeight: FontWeight.bold,
+                  )),
+              style:
+                  ElevatedButton.styleFrom(backgroundColor: Colors.teal[400]),
             ),
           ],
         ),

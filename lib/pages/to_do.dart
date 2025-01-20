@@ -7,7 +7,7 @@ import 'package:todoapp/pages/pdf_compressor.dart';
 import 'package:todoapp/util/alert_dialog.dart';
 import 'package:todoapp/util/dialog_box.dart';
 import 'package:todoapp/util/todo_tile.dart';
-
+import 'package:url_launcher/url_launcher.dart';
 
 class ToDo extends StatefulWidget {
   const ToDo({super.key});
@@ -32,6 +32,19 @@ class _ToDoState extends State<ToDo> {
   }
 
   final _controller = TextEditingController();
+
+  // import 'package:url_launcher/url_launcher.dart';
+
+  void _openProfileLink() async {
+    final Uri url = Uri.parse("https://www.amarduttupadhyay.in/");
+
+    if (await canLaunchUrl(url)) {
+      // ✅ Check if the URL can be opened
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      throw Exception("Could not launch $url");
+    }
+  }
 
   void checkBoxChanged(bool? value, int index) {
     setState(() {
@@ -112,15 +125,12 @@ class _ToDoState extends State<ToDo> {
     Navigator.of(context).pop();
   }
 
-
   void compressPDF() {
-  Navigator.push(
-    context,
-    MaterialPageRoute(builder: (context) => PDFCompressorPage()),
-  );
-}
-
-
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => PDFCompressorPage()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -147,14 +157,53 @@ class _ToDoState extends State<ToDo> {
               showDialog(
                 context: context,
                 builder: (context) => AlertDialog(
-                  title: Text("Swipe Instructions"),
-                  content: Text("Swipe left to delete, swipe right to edit."),
+                  title: const Text("Swipe Instructions"),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text("Swipe left to delete, swipe right to edit."),
+                      const SizedBox(height: 10), // Space between text and link
+                      GestureDetector(
+                        onTap: _openProfileLink, // ✅ Open URL when tapped
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // ✅ Flutter Profile Icon
+                            CircleAvatar(
+                              radius: 18, // Icon size
+                              backgroundColor:
+                                  Colors.grey.shade300, // Background color
+                              child: Icon(
+                                Icons.person, // Default Flutter profile icon
+                                size: 20,
+                                color: Color.fromARGB(255, 107, 3, 244), // Icon color
+                              ),
+                            ),
+                            const SizedBox(
+                                width: 8), // Space between icon and text
+
+                            // ✅ Clickable Text with Underline
+                            const Text(
+                              "@Amar - Check out me!",
+                              style: TextStyle(
+                                color: Color.fromARGB(
+                                    255, 148, 8, 235), // Custom color
+                                fontWeight: FontWeight.bold,
+                                decoration: TextDecoration
+                                    .underline, // Underline effect
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                   actions: [
                     TextButton(
                       onPressed: () {
                         Navigator.of(context).pop();
                       },
-                      child: Text("OK"),
+                      child: const Text("OK"),
                     ),
                   ],
                 ),
